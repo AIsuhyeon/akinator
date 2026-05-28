@@ -175,7 +175,7 @@ def render_playing() -> None:
         else:
             st.caption("아직 답한 질문이 없어요.")
 
-    if st.button("🏳️ 포기하고 정답 공개 (내가 이김)"):
+    if st.button("🏳️ 홈으로 돌아가"):
         _finish_as_lose()
         st.rerun()
 
