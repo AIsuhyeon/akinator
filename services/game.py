@@ -75,7 +75,7 @@ def get_ai_move(qa_history: List[Dict], force_guess: bool = False) -> Dict:
                 system_instruction=_SYSTEM_PROMPT,
                 response_mime_type="application/json",
                 temperature=0.7,
-                max_output_tokens=300,
+                max_output_tokens=1000,
             ),
         )
     except Exception as e:
