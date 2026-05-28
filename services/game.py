@@ -1,14 +1,4 @@
-좋아요, .streamlit/config.toml 완료! 이번엔 게임 두뇌인 game.py예요. 긴 코드지만 통째로 복사-붙여넣기만 하면 돼요.
-📄 다시 파일 3: services/game.py
-GitHub에서 할 일
-
-Add file ▾ → Create new file
-파일이름 칸에 정확히:
-
-   services/game.py
-→ ⚠️ services/ 로 시작 (점 아님!)
-3. 큰 칸에 아래 코드 전체 붙여넣기:
-python"""
+"""
 AI 스무고개 게임 핵심 로직 (Google Gemini 버전)
 """
 import json
@@ -19,14 +9,13 @@ from google import genai
 from google.genai import types
 
 
-# Gemini 모델 (최신 무료 모델)
 MODEL_NAME = "gemini-2.5-flash"
 
 MAX_QUESTIONS = 20
 
 
 def _get_client() -> genai.Client:
-    """Gemini 클라이언트 초기화 (키는 Streamlit secrets에서 읽음)"""
+    """Gemini 클라이언트 초기화"""
     return genai.Client(api_key=st.secrets["gemini"]["api_key"])
 
 
@@ -74,9 +63,9 @@ def get_ai_move(qa_history: List[Dict], force_guess: bool = False) -> Dict:
 이제 당신의 차례입니다."""
 
     if force_guess:
-        user_prompt += "\n\n⚠️ 질문 기회를 모두 소진했습니다. 반드시 정답을 추측(guess)하세요."
+        user_prompt += "\n\n질문 기회를 모두 소진했습니다. 반드시 정답을 추측(guess)하세요."
     elif question_count >= MAX_QUESTIONS - 2:
-        user_prompt += "\n\n⏰ 질문이 거의 끝나갑니다. 슬슬 추측을 고려하세요."
+        user_prompt += "\n\n질문이 거의 끝나갑니다. 슬슬 추측을 고려하세요."
 
     try:
         response = client.models.generate_content(
@@ -99,7 +88,7 @@ def get_ai_move(qa_history: List[Dict], force_guess: bool = False) -> Dict:
     try:
         result = json.loads(result_text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"AI 응답 파싱 실패: {e}\n응답: {result_text[:200]}") from e
+        raise ValueError(f"AI 응답 파싱 실패: {e}") from e
 
     move_type = result.get("type", "question")
     content = str(result.get("content", "")).strip()
@@ -122,12 +111,9 @@ def get_final_reaction(won: bool, qa_history: List[Dict], answer: str = "") -> s
     client = _get_client()
 
     if won:
-        prompt = f"""당신은 방금 스무고개에서 {len(qa_history)}개의 질문 만에 정답을 맞혔습니다.
-승리의 기쁨을 담아 재치있고 짧은 한국어 소감을 한 문장으로 말하세요. (이모지 1개 포함 가능)"""
+        prompt = f"당신은 방금 스무고개에서 {len(qa_history)}개의 질문 만에 정답을 맞혔습니다. 승리의 기쁨을 담아 재치있고 짧은 한국어 소감을 한 문장으로 말하세요."
     else:
-        prompt = f"""당신은 스무고개에서 정답을 맞히지 못했습니다.
-실제 정답은 '{answer}'였습니다.
-아깝게 진 것에 대한 재치있고 깔끔한 한국어 소감을 한 문장으로 말하세요. (이모지 1개 포함 가능)"""
+        prompt = f"당신은 스무고개에서 정답을 맞히지 못했습니다. 실제 정답은 '{answer}'였습니다. 아깝게 진 것에 대한 재치있고 깔끔한 한국어 소감을 한 문장으로 말하세요."
 
     try:
         response = client.models.generate_content(
