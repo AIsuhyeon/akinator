@@ -19,6 +19,8 @@ def _get_client() -> genai.Client:
     return genai.Client(api_key=st.secrets["gemini"]["api_key"])
 
 
+# ===== 모드 1: AI가 맞히기 (기존) =====
+
 _SYSTEM_PROMPT = """당신은 스무고개 게임의 천재 플레이어입니다.
 사용자가 머릿속에 '무언가'(사물, 동물, 인물, 장소, 개념 등)를 하나 정했습니다.
 당신의 목표는 예/아니오로 답할 수 있는 질문을 던져서, 그것이 무엇인지 맞히는 것입니다.
@@ -127,3 +129,84 @@ def get_final_reaction(won: bool, qa_history: List[Dict], answer: str = "") -> s
         return (response.text or "").strip() or ("좋은 게임이었어요!" if won else "다음엔 꼭 맞힐게요!")
     except Exception:
         return "좋은 게임이었어요!" if won else "다음엔 꼭 맞힐게요!"
+
+
+# ===== 모드 2: AI가 출제하기 (사람이 맞히기) =====
+
+_HOST_SYSTEM_PROMPT = """당신은 스무고개 게임의 '출제자'입니다.
+당신이 정답을 하나 정하고, 사용자가 질문으로 그것을 맞힙니다.
+- 정답은 누구나 아는 사물/동물/인물/장소/개념 중 하나여야 합니다.
+- 사용자의 질문에는 반드시 정답에 근거해 정직하게 답하세요.
+반드시 아래 JSON 형식으로만 답하세요. 다른 텍스트는 출력하지 마세요."""
+
+
+def start_host_game() -> Dict:
+    """AI가 정답을 정하고 첫 힌트를 준다."""
+    client = _get_client()
+    prompt = """스무고개 정답을 하나 정하세요.
+JSON 형식: {"answer": "정답 명사 하나", "hint": "정답을 직접 말하지 않는 넓은 범주 힌트 한 줄"}"""
+    try:
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_HOST_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                temperature=1.0,
+                max_output_tokens=200,
+            ),
+        )
+        result = json.loads(response.text)
+    except Exception as e:
+        raise Exception(f"AI 출제 중 오류: {e}") from e
+    return {"answer": str(result.get("answer", "")).strip(),
+            "hint": str(result.get("hint", "")).strip()}
+
+
+def answer_user_question(secret: str, qa_history: List[Dict], question: str) -> str:
+    """사용자 질문에 AI가 정답에 근거해 답한다."""
+    client = _get_client()
+    history_lines = [f"Q: {qa['question']} → A: {qa['answer']}" for qa in qa_history]
+    history_text = "\n".join(history_lines) if history_lines else "(없음)"
+    prompt = f"""정답은 '{secret}'입니다. 사용자의 질문에 정직하게 답하세요.
+지금까지 문답:
+{history_text}
+
+사용자 질문: {question}
+
+JSON 형식: {{"answer": "예 / 아니오 / 애매함 / 질문이 모호함 중 하나"}}"""
+    try:
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.3,
+                max_output_tokens=100,
+            ),
+        )
+        result = json.loads(response.text)
+    except Exception as e:
+        raise Exception(f"AI 응답 중 오류: {e}") from e
+    return str(result.get("answer", "애매함")).strip()
+
+
+def check_user_guess(secret: str, guess: str) -> bool:
+    """사용자의 정답 추측이 맞는지 AI가 판정한다 (동의어/표기차이 허용)."""
+    client = _get_client()
+    prompt = f"""정답: '{secret}', 사용자 추측: '{guess}'.
+같은 대상을 가리키면(동의어·표기차이 포함) 정답입니다.
+JSON 형식: {{"correct": true 또는 false}}"""
+    try:
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.0,
+                max_output_tokens=50,
+            ),
+        )
+        return bool(json.loads(response.text).get("correct", False))
+    except Exception:
+        return False
