@@ -153,10 +153,13 @@ JSON 형식: {"answer": "정답 명사 하나", "hint": "정답을 직접 말하
                 system_instruction=_HOST_SYSTEM_PROMPT,
                 response_mime_type="application/json",
                 temperature=1.0,
-                max_output_tokens=200,
+                max_output_tokens=2000,
             ),
         )
-        result = json.loads(response.text)
+        result_text = (response.text or "").strip()
+        if not result_text:
+            raise ValueError("AI 응답이 비어있습니다. 다시 시도해주세요.")
+        result = json.loads(result_text)
     except Exception as e:
         raise Exception(f"AI 출제 중 오류: {e}") from e
     return {"answer": str(result.get("answer", "")).strip(),
@@ -182,10 +185,13 @@ JSON 형식: {{"answer": "예 / 아니오 / 애매함 / 질문이 모호함 중 
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=0.3,
-                max_output_tokens=100,
+                max_output_tokens=1000,
             ),
         )
-        result = json.loads(response.text)
+        result_text = (response.text or "").strip()
+        if not result_text:
+            return "애매함"
+        result = json.loads(result_text)
     except Exception as e:
         raise Exception(f"AI 응답 중 오류: {e}") from e
     return str(result.get("answer", "애매함")).strip()
