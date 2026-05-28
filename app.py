@@ -1,12 +1,19 @@
 """
 🔮 AI 스무고개 (AI Akinator)
-사용자가 머릿속에 무언가를 정하면 AI가 예/아니오 질문으로 맞히는 게임.
+모드 1: AI가 맞히기 / 모드 2: AI가 문제 내기
 """
 from typing import Dict, List
 
 import streamlit as st
 
-from services.game import MAX_QUESTIONS, get_ai_move, get_final_reaction
+from services.game import (
+    MAX_QUESTIONS,
+    get_ai_move,
+    get_final_reaction,
+    start_host_game,
+    answer_user_question,
+    check_user_guess,
+)
 
 
 st.set_page_config(page_title="AI 스무고개", page_icon="🔮", layout="centered")
@@ -14,6 +21,7 @@ st.set_page_config(page_title="AI 스무고개", page_icon="🔮", layout="cente
 
 def _init_state() -> None:
     defaults = {
+        "mode": None,            # "ai_guess" | "ai_host"
         "phase": "start",
         "qa_history": [],
         "current_move": None,
@@ -21,6 +29,10 @@ def _init_state() -> None:
         "final_answer": "",
         "ai_reaction": "",
         "last_error": None,
+        # 모드 2 전용
+        "secret": "",
+        "hint": "",
+        "host_result": None,     # "win" | "lose"
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -34,7 +46,34 @@ def _question_number() -> int:
     return len(st.session_state.qa_history)
 
 
-def _start_game() -> None:
+# ========== 공통: 모드 선택 ==========
+
+def render_mode_select() -> None:
+    st.title("🔮 AI 스무고개")
+    st.markdown("#### 플레이할 모드를 선택하세요")
+    st.write("")
+    c1, c2 = st.columns(2)
+    with c1:
+        with st.container(border=True):
+            st.markdown("### 🤖 AI가 맞히기")
+            st.caption("당신이 정답을 떠올리면 AI가 질문해서 맞힙니다.")
+            if st.button("이 모드로 시작", use_container_width=True, type="primary", key="m1"):
+                st.session_state.mode = "ai_guess"
+                _start_ai_guess()
+                st.rerun()
+    with c2:
+        with st.container(border=True):
+            st.markdown("### 🧑 내가 맞히기")
+            st.caption("AI가 정답을 정하면 당신이 질문해서 맞힙니다.")
+            if st.button("이 모드로 시작", use_container_width=True, key="m2"):
+                st.session_state.mode = "ai_host"
+                _start_ai_host()
+                st.rerun()
+
+
+# ========== 모드 1: AI가 맞히기 (기존 로직) ==========
+
+def _start_ai_guess() -> None:
     st.session_state.phase = "playing"
     st.session_state.qa_history = []
     st.session_state.result = None
@@ -90,30 +129,10 @@ def _finish_as_lose() -> None:
     st.session_state.phase = "result"
 
 
-def render_start() -> None:
-    st.title("🔮 AI 스무고개")
-    st.markdown("#### AI가 당신의 마음속 정답을 맞혀봅니다")
-    st.write("")
-    st.markdown(
-        """
-        **게임 방법**
-        1. 머릿속으로 **무언가 하나**를 정하세요 (사물, 동물, 인물, 장소 등)
-        2. AI가 **예/아니오 질문**을 던집니다 (최대 20개)
-        3. 솔직하게 답해주세요
-        4. AI가 **정답을 맞히면 AI 승리**, 20개 안에 못 맞히면 **당신 승리!**
-        """
-    )
-    st.info("💡 예시: '사과', '강아지', '에펠탑', '아인슈타인', '축구공' 등 누구나 아는 것으로 정해보세요.")
-    st.write("")
-    if st.button("🎮 게임 시작", type="primary", use_container_width=True):
-        _start_game()
-        st.rerun()
-
-
-def render_playing() -> None:
+def render_ai_guess_playing() -> None:
     move = st.session_state.current_move
     asked = _question_number()
-    st.markdown("### 🔮 AI 스무고개")
+    st.markdown("### 🤖 AI가 맞히기")
     st.progress(min(asked / MAX_QUESTIONS, 1.0), text=f"질문 {asked} / {MAX_QUESTIONS}")
 
     if move is None:
@@ -180,10 +199,10 @@ def render_playing() -> None:
         st.rerun()
 
 
-def render_result() -> None:
+def render_ai_guess_result() -> None:
     result = st.session_state.result
     asked = _question_number()
-    st.markdown("### 🔮 AI 스무고개")
+    st.markdown("### 🤖 AI가 맞히기")
     st.write("")
 
     if result == "win":
@@ -219,15 +238,141 @@ def render_result() -> None:
 
     st.write("")
     if st.button("🔄 다시 하기", type="primary", use_container_width=True):
-        st.session_state.phase = "start"
-        st.session_state.current_move = None
+        _reset_to_home()
         st.rerun()
 
 
+# ========== 모드 2: AI가 출제하기 (사람이 맞히기) ==========
+
+def _start_ai_host() -> None:
+    st.session_state.phase = "playing"
+    st.session_state.qa_history = []
+    st.session_state.host_result = None
+    st.session_state.secret = ""
+    st.session_state.hint = ""
+    st.session_state.last_error = None
+    try:
+        with st.spinner("🤔 AI가 정답을 정하는 중..."):
+            data = start_host_game()
+        st.session_state.secret = data["answer"]
+        st.session_state.hint = data["hint"]
+    except Exception as e:
+        st.session_state.last_error = str(e)
+
+
+def render_ai_host_playing() -> None:
+    asked = _question_number()
+    st.markdown("### 🧑 내가 맞히기")
+    st.progress(min(asked / MAX_QUESTIONS, 1.0), text=f"질문 {asked} / {MAX_QUESTIONS}")
+
+    if not st.session_state.secret:
+        st.warning("AI가 정답을 정하지 못했습니다. 다시 시도해주세요.")
+        if st.session_state.get("last_error"):
+            with st.expander("🔍 오류 상세 내용 보기", expanded=True):
+                st.code(st.session_state.last_error, language="text")
+        if st.button("🔄 다시 시도"):
+            _start_ai_host()
+            st.rerun()
+        return
+
+    st.info(f"💡 힌트: {st.session_state.hint}")
+    st.write("")
+
+    # 질문하기
+    with st.container(border=True):
+        st.markdown("#### ❓ AI에게 예/아니오 질문하기")
+        q = st.text_input("질문 입력", placeholder="예: 그것은 살아있는 생물인가요?", key="user_q")
+        if st.button("질문 보내기", type="primary", disabled=(asked >= MAX_QUESTIONS)):
+            if q.strip():
+                try:
+                    with st.spinner("🤔 AI가 답하는 중..."):
+                        ans = answer_user_question(st.session_state.secret, st.session_state.qa_history, q.strip())
+                    st.session_state.qa_history.append({"question": q.strip(), "answer": ans})
+                except Exception as e:
+                    st.session_state.last_error = str(e)
+                st.rerun()
+
+    if asked >= MAX_QUESTIONS:
+        st.warning("질문 20개를 모두 사용했어요! 이제 정답을 입력해보세요.")
+
+    st.write("")
+
+    # 정답 맞히기
+    with st.container(border=True):
+        st.markdown("#### 🎯 정답 맞히기")
+        guess = st.text_input("정답 입력", placeholder="예: 코끼리", key="user_guess")
+        if st.button("정답 제출"):
+            if guess.strip():
+                with st.spinner("판정 중..."):
+                    correct = check_user_guess(st.session_state.secret, guess.strip())
+                if correct:
+                    st.session_state.host_result = "win"
+                else:
+                    st.session_state.host_result = "lose_guess"
+                    st.session_state.qa_history.append({"question": f"[추측] {guess.strip()}", "answer": "땡!"})
+                if correct or asked >= MAX_QUESTIONS:
+                    st.session_state.phase = "result"
+                st.rerun()
+
+    st.write("")
+    with st.expander(f"📜 지금까지의 문답 ({asked}개)"):
+        if st.session_state.qa_history:
+            for i, qa in enumerate(st.session_state.qa_history, start=1):
+                st.markdown(f"**{i}. {qa['question']}**")
+                st.caption(f"→ {qa['answer']}")
+        else:
+            st.caption("아직 질문이 없어요.")
+
+    if st.button("🏳️ 홈으로 돌아가기"):
+        _reset_to_home()
+        st.rerun()
+
+
+def render_ai_host_result() -> None:
+    asked = _question_number()
+    st.markdown("### 🧑 내가 맞히기")
+    st.write("")
+    if st.session_state.host_result == "win":
+        st.balloons()
+        st.success(f"## 🎉 정답! 당신의 승리!")
+        st.markdown(f"정답은 **{st.session_state.secret}** 였습니다. ({asked}개 질문 사용)")
+    else:
+        st.markdown("## 🤖 AI 승리!")
+        st.markdown(f"아쉽네요! 정답은 **{st.session_state.secret}** 였습니다.")
+
+    st.write("")
+    with st.expander(f"📜 전체 문답 다시보기 ({asked}개)", expanded=False):
+        for i, qa in enumerate(st.session_state.qa_history, start=1):
+            st.markdown(f"**{i}. {qa['question']}**")
+            st.caption(f"→ {qa['answer']}")
+
+    st.write("")
+    if st.button("🔄 다시 하기", type="primary", use_container_width=True):
+        _reset_to_home()
+        st.rerun()
+
+
+# ========== 공통 종료/라우팅 ==========
+
+def _reset_to_home() -> None:
+    st.session_state.mode = None
+    st.session_state.phase = "start"
+    st.session_state.current_move = None
+    st.session_state.host_result = None
+
+
+mode = st.session_state.mode
 phase = st.session_state.phase
-if phase == "start":
-    render_start()
-elif phase == "playing":
-    render_playing()
-else:
-    render_result()
+
+if mode is None:
+    render_mode_select()
+elif mode == "ai_guess":
+    if phase == "playing":
+        render_ai_guess_playing()
+    else:
+        render_ai_guess_result()
+elif mode == "ai_host":
+    if phase == "playing":
+        render_ai_host_playing()
+    else:
+        render_ai_host_result()
