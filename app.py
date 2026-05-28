@@ -194,7 +194,8 @@ def render_ai_guess_playing() -> None:
         else:
             st.caption("아직 답한 질문이 없어요.")
 
-    if st.button("🏳️ 홈으로 돌아가기"):
+      st.write("")
+    if st.button("🏳️ 포기하기", key="guess_giveup"):
         _finish_as_lose()
         st.rerun()
 
@@ -323,10 +324,11 @@ def render_ai_host_playing() -> None:
         else:
             st.caption("아직 질문이 없어요.")
 
-    if st.button("🏳️ 홈으로 돌아가기"):
-        _reset_to_home()
+    st.write("")
+    if st.button("🏳️ 포기하기", key="host_giveup"):
+        st.session_state.host_result = "lose"
+        st.session_state.phase = "result"
         st.rerun()
-
 
 def render_ai_host_result() -> None:
     asked = _question_number()
@@ -374,5 +376,14 @@ elif mode == "ai_guess":
 elif mode == "ai_host":
     if phase == "playing":
         render_ai_host_playing()
+    else:
+        render_ai_host_result()
+
+# 🏠 홈 버튼 — 모드 선택 화면이 아니면 항상 노출
+if mode is not None:
+    st.write("")
+    st.divider()
+    if st.button("🏠 홈으로", key="global_home"):
+        _reset_to_home(
     else:
         render_ai_host_result()
