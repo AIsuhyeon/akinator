@@ -32,7 +32,7 @@ def _init_state() -> None:
         # 모드 2 전용
         "secret": "",
         "hint": "",
-        "host_result": None,     # "win" | "lose"
+        "host_result": None,     # "win" | "lose" | "lose_guess"
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -71,7 +71,7 @@ def render_mode_select() -> None:
                 st.rerun()
 
 
-# ========== 모드 1: AI가 맞히기 (기존 로직) ==========
+# ========== 모드 1: AI가 맞히기 ==========
 
 def _start_ai_guess() -> None:
     st.session_state.phase = "playing"
@@ -194,7 +194,7 @@ def render_ai_guess_playing() -> None:
         else:
             st.caption("아직 답한 질문이 없어요.")
 
-      st.write("")
+    st.write("")
     if st.button("🏳️ 포기하기", key="guess_giveup"):
         _finish_as_lose()
         st.rerun()
@@ -237,11 +237,6 @@ def render_ai_guess_result() -> None:
             st.markdown(f"**{i}. {qa['question']}**")
             st.caption(f"→ {qa['answer']}")
 
-    st.write("")
-    if st.button("🔄 다시 하기", type="primary", use_container_width=True):
-        _reset_to_home()
-        st.rerun()
-
 
 # ========== 모드 2: AI가 출제하기 (사람이 맞히기) ==========
 
@@ -279,7 +274,6 @@ def render_ai_host_playing() -> None:
     st.info(f"💡 힌트: {st.session_state.hint}")
     st.write("")
 
-    # 질문하기
     with st.container(border=True):
         st.markdown("#### ❓ AI에게 예/아니오 질문하기")
         q = st.text_input("질문 입력", placeholder="예: 그것은 살아있는 생물인가요?", key="user_q")
@@ -298,7 +292,6 @@ def render_ai_host_playing() -> None:
 
     st.write("")
 
-    # 정답 맞히기
     with st.container(border=True):
         st.markdown("#### 🎯 정답 맞히기")
         guess = st.text_input("정답 입력", placeholder="예: 코끼리", key="user_guess")
@@ -308,11 +301,13 @@ def render_ai_host_playing() -> None:
                     correct = check_user_guess(st.session_state.secret, guess.strip())
                 if correct:
                     st.session_state.host_result = "win"
+                    st.session_state.phase = "result"
                 else:
                     st.session_state.host_result = "lose_guess"
                     st.session_state.qa_history.append({"question": f"[추측] {guess.strip()}", "answer": "땡!"})
-                if correct or asked >= MAX_QUESTIONS:
-                    st.session_state.phase = "result"
+                    if asked >= MAX_QUESTIONS:
+                        st.session_state.host_result = "lose"
+                        st.session_state.phase = "result"
                 st.rerun()
 
     st.write("")
@@ -330,13 +325,14 @@ def render_ai_host_playing() -> None:
         st.session_state.phase = "result"
         st.rerun()
 
+
 def render_ai_host_result() -> None:
     asked = _question_number()
     st.markdown("### 🧑 내가 맞히기")
     st.write("")
     if st.session_state.host_result == "win":
         st.balloons()
-        st.success(f"## 🎉 정답! 당신의 승리!")
+        st.success("## 🎉 정답! 당신의 승리!")
         st.markdown(f"정답은 **{st.session_state.secret}** 였습니다. ({asked}개 질문 사용)")
     else:
         st.markdown("## 🤖 AI 승리!")
@@ -348,11 +344,6 @@ def render_ai_host_result() -> None:
             st.markdown(f"**{i}. {qa['question']}**")
             st.caption(f"→ {qa['answer']}")
 
-    st.write("")
-    if st.button("🔄 다시 하기", type="primary", use_container_width=True):
-        _reset_to_home()
-        st.rerun()
-
 
 # ========== 공통 종료/라우팅 ==========
 
@@ -361,6 +352,9 @@ def _reset_to_home() -> None:
     st.session_state.phase = "start"
     st.session_state.current_move = None
     st.session_state.host_result = None
+    st.session_state.qa_history = []
+    st.session_state.secret = ""
+    st.session_state.hint = ""
 
 
 mode = st.session_state.mode
@@ -384,6 +378,5 @@ if mode is not None:
     st.write("")
     st.divider()
     if st.button("🏠 홈으로", key="global_home"):
-        _reset_to_home(
-    else:
-        render_ai_host_result()
+        _reset_to_home()
+        st.rerun()
