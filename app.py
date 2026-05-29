@@ -16,7 +16,31 @@ from services.game import (
 )
 
 
-st.set_page_config(page_title="AI 스무고개", page_icon="🔮", layout="centered")
+st.set_page_config(
+    page_title="AI 스무고개",
+    page_icon="🔮",
+    layout="centered",
+    menu_items={
+        "Get Help": None,
+        "Report a bug": None,
+        "About": "🔮 AI 스무고개 — 회사 AI 과제 제출용 데모",
+    },
+)
+
+# 우측 상단 툴바(Share/GitHub) 및 하단 푸터 숨기기
+st.markdown(
+    """
+    <style>
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    [data-testid="stDecoration"] {visibility: hidden !important;}
+    [data-testid="stStatusWidget"] {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important;}
+    header {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def _init_state() -> None:
