@@ -167,24 +167,33 @@ JSON 형식: {"answer": "정답 명사 하나", "hint": "정답을 직접 말하
 
 
 def answer_user_question(secret: str, qa_history: List[Dict], question: str) -> str:
-    """사용자 질문에 AI가 정답에 근거해 답한다."""
+    """사용자 질문에 AI가 정답에 근거해 답한다. 예/아니오/애매함/모호한 질문 중 하나만 반환."""
     client = _get_client()
     history_lines = [f"Q: {qa['question']} → A: {qa['answer']}" for qa in qa_history]
     history_text = "\n".join(history_lines) if history_lines else "(없음)"
-    prompt = f"""정답은 '{secret}'입니다. 사용자의 질문에 정직하게 답하세요.
-지금까지 문답:
+    prompt = f"""당신은 스무고개 게임의 출제자입니다. 정답은 '{secret}'입니다.
+
+## 절대 규칙
+1. 어떠한 경우에도 정답('{secret}')이나 정답을 직접 유추할 수 있는 단어를 답변에 포함하지 마세요.
+2. 사용자가 "이것은 무엇입니까?", "정답이 뭐예요?", "힌트 주세요" 같은 정답을 묻거나 개방형으로 묻는 질문을 하면, 반드시 "질문이 모호함"으로 답하세요.
+3. 사용자 질문이 예/아니오로 답할 수 있는 형식이면 정답에 근거해 정직하게 "예" 또는 "아니오"로 답하세요.
+4. 예/아니오로 명확히 답하기 애매하면 "애매함"으로 답하세요.
+5. 응답은 반드시 아래 네 가지 중 하나의 단어만 포함해야 합니다: 예, 아니오, 애매함, 질문이 모호함
+
+## 지금까지 문답
 {history_text}
 
-사용자 질문: {question}
+## 사용자의 새 질문
+{question}
 
-JSON 형식: {{"answer": "예 / 아니오 / 애매함 / 질문이 모호함 중 하나"}}"""
+JSON 형식으로만 답하세요: {{"answer": "예" 또는 "아니오" 또는 "애매함" 또는 "질문이 모호함"}}"""
     try:
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.3,
+                temperature=0.1,
                 max_output_tokens=1000,
             ),
         )
@@ -194,7 +203,22 @@ JSON 형식: {{"answer": "예 / 아니오 / 애매함 / 질문이 모호함 중 
         result = json.loads(result_text)
     except Exception as e:
         raise Exception(f"AI 응답 중 오류: {e}") from e
-    return str(result.get("answer", "애매함")).strip()
+
+    raw = str(result.get("answer", "")).strip()
+    # 허용된 4가지 답변 외의 응답이 오면 안전한 기본값으로 정규화
+    allowed = {"예", "아니오", "애매함", "질문이 모호함"}
+    if raw not in allowed:
+        # 정답 단어가 섞여 들어온 경우도 방어
+        if secret and secret in raw:
+            return "질문이 모호함"
+        # "Yes/No" 등 영문 응답 대응
+        low = raw.lower()
+        if low in ("yes", "y", "true"):
+            return "예"
+        if low in ("no", "n", "false"):
+            return "아니오"
+        return "애매함"
+    return raw
 
 
 def check_user_guess(secret: str, guess: str) -> bool:
