@@ -298,6 +298,7 @@ def render_ai_host_playing() -> None:
     st.info(f"💡 힌트: {st.session_state.hint}")
     st.write("")
 
+    # 질문 입력
     with st.container(border=True):
         st.markdown("#### ❓ AI에게 예/아니오 질문하기")
         q = st.text_input("질문 입력", placeholder="예: 그것은 살아있는 생물인가요?", key="user_q")
@@ -311,11 +312,32 @@ def render_ai_host_playing() -> None:
                     st.session_state.last_error = str(e)
                 st.rerun()
 
+    # 가장 최근 문답을 크게 표시
+    last_qa = None
+    for qa in reversed(st.session_state.qa_history):
+        if not qa["question"].startswith("[추측]"):
+            last_qa = qa
+            break
+
+    if last_qa:
+        with st.container(border=True):
+            st.markdown(f"##### 🗣️ 방금 질문")
+            st.markdown(f"**Q. {last_qa['question']}**")
+            st.markdown(f"##### 🤖 AI의 답변")
+            answer_emoji = {
+                "예": "⭕ **예**",
+                "아니오": "❌ **아니오**",
+                "애매함": "🤷 **애매함**",
+                "질문이 모호함": "❓ **질문이 모호함 — 예/아니오로 답할 수 있게 다시 물어주세요**",
+            }.get(last_qa["answer"], f"💬 {last_qa['answer']}")
+            st.markdown(f"## {answer_emoji}")
+
     if asked >= MAX_QUESTIONS:
         st.warning("질문 20개를 모두 사용했어요! 이제 정답을 입력해보세요.")
 
     st.write("")
 
+    # 정답 맞히기
     with st.container(border=True):
         st.markdown("#### 🎯 정답 맞히기")
         guess = st.text_input("정답 입력", placeholder="예: 코끼리", key="user_guess")
