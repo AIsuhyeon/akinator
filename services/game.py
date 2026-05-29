@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types
 
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-2.5-flash-lite"
 
 MAX_QUESTIONS = 20
 
